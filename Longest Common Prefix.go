@@ -30,19 +30,44 @@ func longestCommonPrefix(strs []string) string {
     //str1 := shortest[0:n]
     fmt.Println(str)
     
+    
     var k int
     k = 0
-    for _,v := range str {
-        j := 1
-        if v[j-1:j] != shortest[j] {
-            break
-            k = j
-        } else{
-            //k = j
-            continue
-        }
-        j++
+    test := make([][]int, m) // 二维切片，m行
+    for i := range test {
+        test[i] = make([]int, len(str)) // 每一行4列
     }
+    var a string
+    var stri string
+    for i:=0; i<n; i++ {
+        for j:=0; j<len(str); j++ {
+            stri = str[i]
+            a = stri[j:j+1]
+            test[i][j] = append(test, a...)
+        }
+
+    }
+    /*
+    // var test int
+    //test = 0
+    for _,v := range str {
+        for j := 1; j < m; {
+            if v[j-1:j] != shortest[j-1] {
+                k = j-1
+                break
+            } else{                
+                //test = j
+                j++
+                continue
+            }
+        }
+        //if test == m - 1 {
+
+        //}
+
+        //j++
+    }
+    */
     fmt.Println(k)
     strreturn := strs[m][0:k]
     return strreturn
