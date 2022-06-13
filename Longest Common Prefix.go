@@ -6,7 +6,7 @@ func longestCommonPrefix(strs []string) string {
     n = 200
     m = 0
 
-    var text [][]string
+    //var text [][]string
     for i,v := range strs {
         length = len(v)
         //row[i] := strings.Split(strs[i], "")
@@ -22,20 +22,28 @@ func longestCommonPrefix(strs []string) string {
     var shortest []string
     shortest = strings.Split(strs[m], "")
     fmt.Println(shortest)
-    /*
-    for i,v := range strs {
-        length = len(v)
-        row := strings.Split(strs[i], "")
-        for j := n-1; j>0; j--{
-            if shortest[j] != row[j] {
-                n = n-1
-            }
-        } 
-
-        }
-        text = append(text, row)
-
+    
+    var str []string 
+    for _,v := range strs {
+        str = append(str, v[0:n])      
     }
-*/
-    return strs[0]
+    //str1 := shortest[0:n]
+    fmt.Println(str)
+    
+    var k int
+    k = 0
+    for _,v := range str {
+        j := 1
+        if v[j-1:j] != shortest[j] {
+            break
+            k = j
+        } else{
+            //k = j
+            continue
+        }
+        j++
+    }
+    fmt.Println(k)
+    strreturn := strs[m][0:k]
+    return strreturn
 }
