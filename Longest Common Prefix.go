@@ -18,6 +18,7 @@ func longestCommonPrefix(strs []string) string {
     }
     fmt.Println(n)
     fmt.Println(m)
+    fmt.Println(len(strs))
 
     var shortest []string
     shortest = strings.Split(strs[m], "")
@@ -33,42 +34,50 @@ func longestCommonPrefix(strs []string) string {
     
     var k int
     k = 0
-    test := make([][]int, m) // 二维切片，m行
-    for i := range test {
-        test[i] = make([]int, len(str)) // 每一行4列
-    }
-    var a string
-    var stri string
-    for i:=0; i<n; i++ {
-        for j:=0; j<len(str); j++ {
-            stri = str[i]
-            a = stri[j:j+1]
-            test[i][j] = append(test, a...)
-        }
-
-    }
     /*
-    // var test int
-    //test = 0
+    test := make([][]string, len(strs)) // 二维切片，xx行
+    for i := range test {
+        test[i] = make([]string, len(shortest)) // 每一行xx列
+    }
+*/
+    var test [][]string
+    var a []string
     for _,v := range str {
-        for j := 1; j < m; {
-            if v[j-1:j] != shortest[j-1] {
-                k = j-1
-                break
-            } else{                
-                //test = j
-                j++
-                continue
+        a = strings.Split(v, "")
+        test = append(test, a)
+    }
+    fmt.Println(test)
+//    fmt.Println(test[1][3])
+    
+
+    for i:=0; i<n-1; i++ {
+        b := 0
+        for j:=0; j<len(str); j++ {
+            if test[j][i] == shortest[i] {                
+                b++
             }
         }
-        //if test == m - 1 {
-
-        //}
-
-        //j++
+        fmt.Println(b)
+        if b==len(str) {
+            k++
+        }
     }
-    */
+
     fmt.Println(k)
-    strreturn := strs[m][0:k]
-    return strreturn
+    var strreturn string
+    //strreturn := strs[m][0:k]
+    if k==1 {
+        strreturn = shortest[0]
+    } else {
+        strreturn = strs[m][0:k]
+    }
+    
+    if len(strs)==1 {
+        return strs[0]
+    } else {
+        return strreturn
+    }
+
+    //return strreturn
+    
 }
