@@ -1,49 +1,31 @@
-func checkOnesSegment(s string) bool {
-    if s=="1"||s=="10" {
-        return true
-    }
-    ss := strings.Split(s,"0")
-    fmt.Println(ss)
-    k := 0
-    for _,v := range ss {
-        if len(v)>=2 {
-            k++
-        }
-    }
-
-    if k == 1|| ss == ["1"] {
-        return true
-    } else {
-        return false
-    }
-
-}
-
-
-
-func checkOnesSegment(s string) bool {
-    var sint int
-    var sstr string  
+func checkOnesSegment(s string) bool { 
     if s=="1" {
         return true
-    } else {
-        sstr = s[1:]
-        sint = int(str)
-        if sint ==0 {
-            return true
+    }
+    sss := strings.Split(s,"")
+
+    j:=0
+    for i:=1; i<len(sss); i++{
+        if sss[0]=="1"&&sss[i]=="0"{
+            j++
         }
     }
- 
+    fmt.Println(j)
+    if j==len(sss)-1 {
+        return true
+    }
     ss := strings.Split(s,"0")
     fmt.Println(ss)
+
+
     k := 0
     for _,v := range ss {
-        if len(v)>=2 {
+        if len(v)>=1 {
             k++
         }
     }
-
-    if k == 1 {
+    fmt.Println(k)
+    if k == 1 && ss[0]!= "1" && ss[len(ss)-1]!= "1" {
         return true
     } else {
         return false
