@@ -50,16 +50,18 @@ func longestCommonPrefix(strs []string) string {
 //    fmt.Println(test[1][3])
     
 
-    for i:=0; i<n-1; i++ {
+    for i:=0; i<n; i++ {
         b := 0
         for j:=0; j<len(str); j++ {
             if test[j][i] == shortest[i] {                
                 b++
-            }
+            } 
         }
-        fmt.Println(b)
+        //fmt.Println(b)
         if b==len(str) {
             k++
+        } else {
+            break
         }
     }
 
