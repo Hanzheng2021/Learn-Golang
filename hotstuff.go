@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	logger "github.com/rs/zerolog/log"
 	"github.com/hyperledger-labs/mirbft/announcer"
 	"github.com/hyperledger-labs/mirbft/config"
 	"github.com/hyperledger-labs/mirbft/log"
@@ -31,12 +30,13 @@ import (
 	pb "github.com/hyperledger-labs/mirbft/protobufs"
 	"github.com/hyperledger-labs/mirbft/request"
 	"github.com/hyperledger-labs/mirbft/tracing"
+	logger "github.com/rs/zerolog/log"
 )
 
 var (
 	///rank
 	hranklog = make(map[int]int32)
-	lock   sync.Mutex
+	lock     sync.Mutex
 )
 
 // Implements chained HotStuff for the sequence numbers of the segment.
@@ -74,10 +74,11 @@ type hotStuffInstance struct {
 	// No more that one heights will be committed with the last sequence number of the segment, since
 	// the segment will be killed once the last sequence number is committed.
 	segmentProposed bool
-
 }
 
 type hotStuffNode struct {
+	///rank
+	rank      int32
 	height    int32
 	sn        int32
 	leader    int32
@@ -135,6 +136,7 @@ func (hi *hotStuffInstance) init(seg manager.Segment, orderer *HotStuffOrderer) 
 	}
 	rootNode :=
 		&hotStuffNode{
+			rank:      0,
 			height:    0,
 			node:      node,
 			digest:    hotStuffDigest(node),
@@ -152,7 +154,7 @@ func (hi *hotStuffInstance) init(seg manager.Segment, orderer *HotStuffOrderer) 
 	hi.locked = rootNode
 	hi.leaf = rootNode
 	hi.highQC = rootNode.node.Certificate
-///rank
+	///rank
 	lock.Lock()
 	hranklog[hi.segment.SegID()] = (int32(hi.segment.FirstSN()) - int32(hi.segment.FirstSN())%int32(membership.NumNodes())) / int32(membership.NumNodes())
 	lock.Unlock()
@@ -190,7 +192,7 @@ func (hi *hotStuffInstance) start() {
 func (hi *hotStuffInstance) proposeSN(sn int32) {
 	logger.Info().Int32("sn", sn).
 		Int("segment", hi.segment.SegID()).
-		Int32("height", hi.leaf.height+1).
+		Int32("height?", hi.leaf.height+1).
 		Int32("view", hi.view).
 		Int32("senderID", membership.OwnID).
 		Bool("proposed", hi.segmentProposed).
@@ -211,8 +213,7 @@ func (hi *hotStuffInstance) proposeSN(sn int32) {
 			Int("nReq", len(batch.Requests)).
 			Msg("New BATCH.")
 
-		///hi.next = hi.next + 1
-		hi.next = hranklog[hi.segment.SegID()]+ 1
+		hi.next = hi.next + 1
 		// If we have proposed all the sequence numbers in the segment, mark the segment as "proposed"
 		if int32(hi.next) == hi.segment.Len() {
 			hi.segmentProposed = true
@@ -227,11 +228,10 @@ func (hi *hotStuffInstance) proposeSN(sn int32) {
 
 	} else {
 		batch = &request.Batch{Requests: make([]*request.Request, 0, 0)}
-		///hi.next = hi.next + 1
-		hi.next = hranklog[hi.segment.SegID()] + 1
+		hi.next = hi.next + 1
 	}
-
-	new := hi.newNode(hi.leaf, batch, hi.highQC, sn, hi.leaf.height+1, membership.OwnID)
+	rank := hranklog[hi.segment.SegID()] + 1
+	new := hi.newNode(hi.leaf, batch, hi.highQC, sn, rank, hi.leaf.height+1, membership.OwnID)
 
 	if _, ok := hi.sn2height[sn]; ok {
 		new.dummy = true
@@ -371,8 +371,7 @@ func (hi *hotStuffInstance) handleProposal(proposal *pb.HotStuffProposal, msg *p
 	}
 
 	hi.vheight = proposal.Node.Height
-
-	new := hi.newNode(hi.nodes[proposal.Node.Certificate.Height], batch, proposal.Node.Certificate, sn, proposal.Node.Height, senderID)
+	new := hi.newNode(hi.nodes[proposal.Node.Certificate.Height], batch, proposal.Node.Certificate, sn, proposal.Node.Rank, proposal.Node.Height, senderID)
 	batch.MarkInFlight()
 
 	// Update to own log
@@ -748,7 +747,7 @@ func (hi *hotStuffInstance) announce(node *hotStuffNode, sn int32, reqBatch *pb.
 }
 
 // Creates a new node
-func (hi *hotStuffInstance) newNode(parent *hotStuffNode, batch *request.Batch, qc *pb.HotStuffQC, sn int32, height int32, leader int32) *hotStuffNode {
+func (hi *hotStuffInstance) newNode(parent *hotStuffNode, batch *request.Batch, qc *pb.HotStuffQC, sn int32, rank int32, height int32, leader int32) *hotStuffNode {
 	node := &pb.HotStuffNode{
 		View:   hi.view,
 		Parent: parent.digest,
@@ -761,6 +760,7 @@ func (hi *hotStuffInstance) newNode(parent *hotStuffNode, batch *request.Batch, 
 	}
 	new := &hotStuffNode{
 		sn:     sn,
+		rank:   rank,
 		height: height,
 		leader: leader,
 		node:   node,
@@ -776,6 +776,7 @@ func (hi *hotStuffInstance) newNode(parent *hotStuffNode, batch *request.Batch, 
 	logger.Debug().
 		Int("segment", hi.segment.SegID()).
 		Int32("sn", sn).
+		Int32("rank", rank).
 		Int32("height", height).
 		Int32("parent", parent.height).
 		Msg("New node")
@@ -820,7 +821,7 @@ func (hi *hotStuffInstance) updateHighQC(qc *pb.HotStuffQC) {
 			// If we dont' have the node of the highQC locally, create a new node from the highQC node
 			// with parent the highest available node.
 			batch := request.NewBatch(qc.Node.Batch)
-			leaf := hi.newNode(hi.nodes[len(hi.nodes)-1], batch, qc.Node.Certificate, -1, qc.Node.Height, hi.leader)
+			leaf := hi.newNode(hi.nodes[len(hi.nodes)-1], batch, qc.Node.Certificate, -1, qc.Node.Rank, qc.Node.Height, hi.leader)
 			// Potentially adding dummy nodes inbetween.
 			hi.addNode(leaf)
 			hi.leaf = leaf
