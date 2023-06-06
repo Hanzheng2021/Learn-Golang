@@ -192,7 +192,7 @@ func (hi *hotStuffInstance) start() {
 func (hi *hotStuffInstance) proposeSN(sn int32) {
 	logger.Info().Int32("sn", sn).
 		Int("segment", hi.segment.SegID()).
-		Int32("height?", hi.leaf.height+1).
+		Int32("height", hi.leaf.height+1).
 		Int32("view", hi.view).
 		Int32("senderID", membership.OwnID).
 		Bool("proposed", hi.segmentProposed).
@@ -741,6 +741,7 @@ func (hi *hotStuffInstance) announce(node *hotStuffNode, sn int32, reqBatch *pb.
 	logger.Info().
 		Int("segment", hi.segment.SegID()).
 		Int32("sn", hi.height2sn[node.height]).
+		Int32("rank", node.rank).
 		Int32("height", node.height).
 		Msg("Announcement.")
 
