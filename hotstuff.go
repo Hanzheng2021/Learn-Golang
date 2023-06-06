@@ -770,6 +770,7 @@ func (hi *hotStuffInstance) newNode(parent *hotStuffNode, batch *request.Batch, 
 		Rank: rank,
 	}
 	new := &hotStuffNode{
+		rank:   rank,
 		sn:     sn,
 		height: height,
 		leader: leader,
