@@ -36,7 +36,7 @@ import (
 var (
 	///rank
 	hranklog = make(map[int]int32)
-	lock     sync.Mutex
+	//lock     sync.Mutex
 )
 
 // Implements chained HotStuff for the sequence numbers of the segment.
@@ -133,10 +133,10 @@ func (hi *hotStuffInstance) init(seg manager.Segment, orderer *HotStuffOrderer) 
 			Height:    0,
 			Signature: nil,
 		},
+		Rank:      0,
 	}
 	rootNode :=
 		&hotStuffNode{
-			rank:      0,
 			height:    0,
 			node:      node,
 			digest:    hotStuffDigest(node),
@@ -155,9 +155,9 @@ func (hi *hotStuffInstance) init(seg manager.Segment, orderer *HotStuffOrderer) 
 	hi.leaf = rootNode
 	hi.highQC = rootNode.node.Certificate
 	///rank
-	lock.Lock()
+	//lock.Lock()
 	hranklog[hi.segment.SegID()] = (int32(hi.segment.FirstSN()) - int32(hi.segment.FirstSN())%int32(membership.NumNodes())) / int32(membership.NumNodes())
-	lock.Unlock()
+	//lock.Unlock()
 
 	// Initalize channel
 	hi.serializer = newOrdererChannel(channelSize)
@@ -353,6 +353,10 @@ func (hi *hotStuffInstance) handleProposal(proposal *pb.HotStuffProposal, msg *p
 			Msgf("Proposal node does not extend locked node with height %d", hi.vheight)
 		return nil
 	}
+///rank
+	if proposal.Node.Rank > hranklog[hi.segment.SegID()] {
+		hranklog[hi.segment.SegID()] = proposal.Node.Rank
+	}
 
 	batch := request.NewBatch(proposal.Node.Batch)
 	if batch == nil {
@@ -434,6 +438,7 @@ func (hi *hotStuffInstance) sendVote(node *hotStuffNode) {
 	vote := &pb.HotStuffVote{
 		Height: node.height,
 		Digest: node.digest,
+		Rank: hranklog[int(membership.OwnID)],
 	}
 
 	data, err := proto.Marshal(vote)
@@ -512,6 +517,10 @@ func (hi *hotStuffInstance) handleVote(signed *pb.SignedMsg, sn, senderID int32)
 	}
 
 	hi.leaf.votes[senderID] = signed
+///rank
+	if vote.Rank > hranklog[hi.segment.SegID()] {
+		hranklog[hi.segment.SegID()] = vote.Rank
+	}
 
 	// Check for a quorum of votes
 	if !hi.leaf.quorum && voteQuorum(hi.leaf) {
@@ -757,10 +766,10 @@ func (hi *hotStuffInstance) newNode(parent *hotStuffNode, batch *request.Batch, 
 			Signature: qc.Signature,
 		},
 		Height: height,
+		Rank: rank,
 	}
 	new := &hotStuffNode{
 		sn:     sn,
-		rank:   rank,
 		height: height,
 		leader: leader,
 		node:   node,
