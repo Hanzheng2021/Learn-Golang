@@ -197,7 +197,7 @@ func (hi *hotStuffInstance) proposeSN(sn int32) {
 		Int32("senderID", membership.OwnID).
 		Bool("proposed", hi.segmentProposed).
 		Msg("Creating PROPOSAL.")
-
+	
 	// Create a new node
 	// New batches are proposed only in view 0
 	var batch *request.Batch
@@ -253,6 +253,12 @@ func (hi *hotStuffInstance) proposeSN(sn int32) {
 				Node:   new.node,
 			},
 		},
+	}
+	if int32(hi.segment.SegID())%int32(membership.NumNodes())== 0 && config.Config.CrashTiming == "Straggler" {		
+		logger.Info().
+		Int("segment", hi.segment.SegID()).
+		Msg("Straggler.")
+		time.Sleep(3000 * time.Millisecond)
 	}
 
 	logger.Info().Int32("sn", sn).
