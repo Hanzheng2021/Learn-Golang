@@ -122,6 +122,13 @@ func (hi *hotStuffInstance) init(seg manager.Segment, orderer *HotStuffOrderer) 
 	// Initialize new view  vote counting structure
 	hi.newViewVotes = make(map[int32]map[int32]*pb.HotStuffNewView)
 
+	///rank
+	rootrank := (int32(hi.segment.FirstSN()) - int32(hi.segment.SegID())%int32(membership.NumNodes())) / int32(membership.NumNodes()) - 1
+	hranklog[hi.segment.SegID()] = rootrank
+	logger.Info().Int32("rootrank", rootrank).
+		Int("segment", hi.segment.SegID()).
+		Msg("Rootrank for the segment.")
+
 	// Initialise the root node
 	node := &pb.HotStuffNode{
 		Height: 0,
@@ -133,10 +140,11 @@ func (hi *hotStuffInstance) init(seg manager.Segment, orderer *HotStuffOrderer) 
 			Height:    0,
 			Signature: nil,
 		},
-		Rank:      0,
+		Rank:      rootrank,
 	}
 	rootNode :=
 		&hotStuffNode{
+			rank: rootrank,
 			height:    0,
 			node:      node,
 			digest:    hotStuffDigest(node),
@@ -154,10 +162,6 @@ func (hi *hotStuffInstance) init(seg manager.Segment, orderer *HotStuffOrderer) 
 	hi.locked = rootNode
 	hi.leaf = rootNode
 	hi.highQC = rootNode.node.Certificate
-	///rank
-	//lock.Lock()
-	hranklog[hi.segment.SegID()] = (int32(hi.segment.FirstSN()) - int32(hi.segment.FirstSN())%int32(membership.NumNodes())) / int32(membership.NumNodes())
-	//lock.Unlock()
 
 	// Initalize channel
 	hi.serializer = newOrdererChannel(channelSize)
@@ -169,7 +173,6 @@ func (hi *hotStuffInstance) init(seg manager.Segment, orderer *HotStuffOrderer) 
 
 	// Initialize the batch channel as a buffered channel of one batch
 	hi.newBatch = make(chan *request.Batch, 1)
-
 }
 
 func (hi *hotStuffInstance) start() {
@@ -190,7 +193,9 @@ func (hi *hotStuffInstance) start() {
 // Proposes a new value for sequence number sn in Segment segment by creating a new leaf node and broadcasting
 // the proposal to all followers of the segment.
 func (hi *hotStuffInstance) proposeSN(sn int32) {
+	rank := (sn - int32(hi.segment.SegID()%membership.NumNodes())) /int32(membership.NumNodes())
 	logger.Info().Int32("sn", sn).
+		Int32("rank", rank).
 		Int("segment", hi.segment.SegID()).
 		Int32("height", hi.leaf.height+1).
 		Int32("view", hi.view).
@@ -215,10 +220,12 @@ func (hi *hotStuffInstance) proposeSN(sn int32) {
 
 		hi.next = hi.next + 1
 		// If we have proposed all the sequence numbers in the segment, mark the segment as "proposed"
-		if int32(hi.next) == hi.segment.Len() {
+		// if int32(hi.next) == hi.segment.Len() {
+		// 	hi.segmentProposed = true
+		// }
+		if sn == hi.segment.LastSN() {
 			hi.segmentProposed = true
 		}
-
 		// If the segment is not proposed yet schedule a new batch
 		if !hi.segmentProposed {
 			go func() {
@@ -230,7 +237,7 @@ func (hi *hotStuffInstance) proposeSN(sn int32) {
 		batch = &request.Batch{Requests: make([]*request.Request, 0, 0)}
 		hi.next = hi.next + 1
 	}
-	rank := hranklog[hi.segment.SegID()] + 1
+	
 	new := hi.newNode(hi.leaf, batch, hi.highQC, sn, rank, hi.leaf.height+1, membership.OwnID)
 
 	if _, ok := hi.sn2height[sn]; ok {
@@ -254,15 +261,17 @@ func (hi *hotStuffInstance) proposeSN(sn int32) {
 			},
 		},
 	}
+
 	if int32(hi.segment.SegID())%int32(membership.NumNodes())== 0 && config.Config.CrashTiming == "Straggler" {		
 		logger.Info().
 		Int("segment", hi.segment.SegID()).
 		Msg("Straggler.")
-		time.Sleep(3000 * time.Millisecond)
+		time.Sleep(2000 * time.Millisecond)
 	}
 
 	logger.Info().Int32("sn", sn).
 		Int("segment", hi.segment.SegID()).
+		Int32("rank", new.rank).
 		Int32("height", new.height).
 		Int32("view", hi.view).
 		Int32("senderId", membership.OwnID).
@@ -523,7 +532,7 @@ func (hi *hotStuffInstance) handleVote(signed *pb.SignedMsg, sn, senderID int32)
 	}
 
 	hi.leaf.votes[senderID] = signed
-///rank
+	///rank
 	if vote.Rank > hranklog[hi.segment.SegID()] {
 		hranklog[hi.segment.SegID()] = vote.Rank
 	}
@@ -567,22 +576,26 @@ func (hi *hotStuffInstance) handleVote(signed *pb.SignedMsg, sn, senderID int32)
 
 	// Propose next batch
 	// Check we have still un-proposed sequence numbers in the segment
-	if int32(hi.next) < hi.segment.Len() {
-		hi.proposeSN(hi.segment.SNs()[hi.next])
+	// if int32(hi.next) < hi.segment.Len() {
+	// 	hi.proposeSN(hi.segment.SNs()[hi.next])
+	// 	return nil
+	// }
+	currank := hranklog[hi.segment.SegID()] + 1
+	newsn := currank*int32(membership.NumNodes())+ int32(hi.segment.SegID()%membership.NumNodes())
+	if newsn <= hi.segment.LastSN() {
+		hi.proposeSN(newsn)
 		return nil
 	}
 
-	// if hranklog[pi.segment.SegID()] < hi.segment.Len() {
-	// 	hi.proposeSN(hranklog[hi.segment.SegID()]*membership.NumNodes()+ int32(pi.segment.SegID()))
-	// 	return nil
-	// }
-
 	// If we have proposed up to last height + 2 we have poroposed enough to make sure the last height commits
 	if int32(hi.next) > hi.segment.Len()+2 {
+	//if newsn > hi.segment.LastSN() +2*int32(membership.NumNodes()) {
+		logger.Info().Int("hi.next",hi.next).Msg("enough end dummy nodes.")	
 		return nil
 	}
 
 	// Reuse the last sequence number to make sure that it commits
+	logger.Info().Int32("LastSN", hi.segment.LastSN()).Msg("Reuse the last SN.")
 	hi.proposeSN(hi.segment.LastSN())
 
 	return nil
@@ -624,7 +637,7 @@ func (hi *hotStuffInstance) sendNewView() {
 	// Enqueue the message to the new leader
 	messenger.EnqueueMsg(orderMsg, hi.leader)
 }
-
+///rank TODO: to be revised 
 func (hi *hotStuffInstance) handleNewView(newview *pb.HotStuffNewView, sn, senderID int32) error {
 	logger.Info().Int32("sn", sn).
 		Int("segment", hi.segment.SegID()).
@@ -744,9 +757,29 @@ func (hi *hotStuffInstance) announce(node *hotStuffNode, sn int32, reqBatch *pb.
 		request.RemoveBatch(node.batch)
 	}
 
+	if node.rank != node.parent.rank + 1 {
+		for i := node.parent.rank + 1; i < node.rank; i = i + 1 {
+			sn2i := int32(hi.segment.SegID()%membership.NumNodes()) + int32(membership.NumNodes())*i
+			logger.Info().
+			Int("segment", hi.segment.SegID()).
+			Int32("sn", sn2i).
+			Int32("rank", i).
+			Msg("Announcement nil block.")
+
+			logEntry1 := &log.Entry{
+				Sn:      sn2i,
+				Batch:   nil,
+				Aborted: aborted,
+			}
+			announcer.Announce(logEntry1)
+			hi.next = hi.next +1
+		}
+	}
 	logger.Info().
 		Int("segment", hi.segment.SegID()).
-		Int32("sn", hi.height2sn[node.height]).
+		Int32("lastrank", node.parent.rank).
+		Int32("sn", sn).
+		//Int32("sn", hi.height2sn[node.height]).
 		Int32("rank", node.rank).
 		Int32("height", node.height).
 		Msg("Announcement.")
