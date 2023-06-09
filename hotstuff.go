@@ -124,7 +124,9 @@ func (hi *hotStuffInstance) init(seg manager.Segment, orderer *HotStuffOrderer) 
 
 	///rank
 	rootrank := (int32(hi.segment.FirstSN()) - int32(hi.segment.SegID())%int32(membership.NumNodes())) / int32(membership.NumNodes()) - 1
+	lock.Lock()
 	hranklog[hi.segment.SegID()] = rootrank
+	lock.Unlock()
 	logger.Info().Int32("rootrank", rootrank).
 		Int("segment", hi.segment.SegID()).
 		Msg("Rootrank for the segment.")
@@ -369,9 +371,11 @@ func (hi *hotStuffInstance) handleProposal(proposal *pb.HotStuffProposal, msg *p
 		return nil
 	}
 ///rank
+	lock.Lock()
 	if proposal.Node.Rank > hranklog[hi.segment.SegID()] {
 		hranklog[hi.segment.SegID()] = proposal.Node.Rank
 	}
+	lock.Unlock()
 
 	batch := request.NewBatch(proposal.Node.Batch)
 	if batch == nil {
@@ -449,11 +453,15 @@ func (hi *hotStuffInstance) sendVote(node *hotStuffNode) {
 		Int32("height", node.height).
 		Int32("leader", hi.leader).
 		Msg("Creating VOTE.")
+	
+	lock.Lock()
+	ownrank := hranklog[int(membership.OwnID)]
+	lock.Unlock()
 
 	vote := &pb.HotStuffVote{
 		Height: node.height,
 		Digest: node.digest,
-		Rank: hranklog[int(membership.OwnID)],
+		Rank: ownrank,
 	}
 
 	data, err := proto.Marshal(vote)
@@ -533,10 +541,11 @@ func (hi *hotStuffInstance) handleVote(signed *pb.SignedMsg, sn, senderID int32)
 
 	hi.leaf.votes[senderID] = signed
 	///rank
+	lock.Lock()
 	if vote.Rank > hranklog[hi.segment.SegID()] {
 		hranklog[hi.segment.SegID()] = vote.Rank
 	}
-
+	lock.Unlock()
 	// Check for a quorum of votes
 	if !hi.leaf.quorum && voteQuorum(hi.leaf) {
 		hi.leaf.quorum = true
@@ -580,7 +589,9 @@ func (hi *hotStuffInstance) handleVote(signed *pb.SignedMsg, sn, senderID int32)
 	// 	hi.proposeSN(hi.segment.SNs()[hi.next])
 	// 	return nil
 	// }
+	lock.Lock()
 	currank := hranklog[hi.segment.SegID()] + 1
+	lock.Unlock()
 	newsn := currank*int32(membership.NumNodes())+ int32(hi.segment.SegID()%membership.NumNodes())
 	if newsn <= hi.segment.LastSN() {
 		hi.proposeSN(newsn)
